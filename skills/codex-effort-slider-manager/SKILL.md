@@ -12,6 +12,12 @@ description: 管理 Antigravity 的「Codex / Claude 风格推理等级滑条」
 Antigravity IDE 的 `extensions/agy` 扩展（反向代理 + View Usage 300ms
 防误触），并同步 `product.json` 校验值。
 
+第三方模型（`third-party-model-patch` 接入的模型）的档位不来自模型标签，
+而是滑条轮询代理 `http://127.0.0.1:50999/plugin/effort/levels`，选择后
+POST `/plugin/effort`（按会话生效）。因此原生下拉对这类模型只有一行是
+预期行为；档位数量（例如 DeepSeek 5 档、StepFun 4 档）由代理返回的
+`levels` 决定。代理未运行时滑条退回原生档位解析，不会报错。
+
 ## 0. 插件根目录
 
 本技能位于 `<plugin>/skills/codex-effort-slider-manager/SKILL.md`，

@@ -44,17 +44,22 @@
   var ENERGY_END = 0.5;
   var MIN_HEIGHT_SLOTS = 2;
 
-  // Antigravity 官方推理档位枚举与展示名映射（对应 main.js 中的 DXb / EXb / GXb）
-  var AG_EFFORT_ORDER = ["off", "low", "medium", "high", "xhigh", "max"];
+  // Antigravity 官方推理档位枚举与展示名映射（对应 main.js 中的 DXb / EXb / GXb）。
+  // default / none / minimal 由代理按会话下发，原生选择器不认识这些标签，
+  // 因此它们只出现在滑条上，不会变成重复的模型行。
+  var AG_EFFORT_ORDER = ["default", "none", "minimal", "low", "medium", "high", "xhigh", "max"];
   var AG_EFFORT_LABELS = {
+    default: "Default",
     off: "Off",
+    none: "Off",
+    minimal: "Minimal",
     low: "Low",
     medium: "Medium",
     high: "High",
     xhigh: "Extra",
     max: "Max"
   };
-  var AG_MODEL_LABEL_RE = /^(.*?)\s*\((off|low|medium|high|xhigh|extra|max)(?:\s+thinking)?\)\s*$/i;
+  var AG_MODEL_LABEL_RE = /^(.*?)\s*\((off|none|default|minimal|low|medium|high|xhigh|extra|max)(?:\s+thinking)?\)\s*$/i;
 
   // Claude 专属主题常量（6×60 点阵、1.6s 从右至左扫掠、Capsule 胶囊滑块）
   var CLAUDE_CELL = 28 / 6; // ≈ 4.67px
@@ -1845,6 +1850,146 @@
     };
   }
 
+  // ── 代理档位桥 ──────────────────────────────────────────────────────────────
+  // 原生模型选择器只认 low/medium/high/xhigh/max 五种标签，none/minimal/default
+  // 无法做成模型变体（会变成未分组的重复行）。滑条改为向第三方模型补丁的代理
+  // 询问每个模型真正支持的档位，并把选择结果按会话写回代理。
+  var AG_PROXY_DEFAULT_ORIGIN = "http://127.0.0.1:50999";
+  var AG_PROXY_SYNC_INTERVAL_MS = 2500;
+
+  var proxyEffort = {
+    byBase: new Map(),
+    current: new Map(),
+    signature: "",
+    conversationId: undefined,
+    lastFetchAt: 0,
+    inFlight: false,
+    available: false,
+    error: "",
+    listeners: new Set()
+  };
+
+  function proxyOrigin() {
+    try {
+      var storage = globalRoot && globalRoot.localStorage;
+      var saved = storage && storage.getItem("antigravity-codex-effort-slider:proxyOrigin");
+      if (saved && /^http:\/\/(?:127\.0\.0\.1|localhost):\d+$/.test(saved)) return saved;
+    } catch (err) {
+      // localStorage 不可用时退回默认端口
+    }
+    return AG_PROXY_DEFAULT_ORIGIN;
+  }
+
+  function proxyBaseKey(label) {
+    if (!label) return "";
+    var parsed = parseModelLabel(String(label));
+    return (parsed ? parsed.base : String(label)).trim().toLowerCase();
+  }
+
+  function proxySignatureOf(byBase) {
+    var parts = [];
+    byBase.forEach(function (entry, key) {
+      parts.push(key + ":" + entry.levels.join(","));
+    });
+    parts.sort();
+    return parts.join("|");
+  }
+
+  function proxyPayloadToMaps(list) {
+    var byBase = new Map();
+    var current = new Map();
+    for (var i = 0; i < list.length; i += 1) {
+      var model = list[i];
+      if (!model || !Array.isArray(model.levels) || !model.levels.length) continue;
+      var entry = {
+        name: model.name || "",
+        displayName: model.displayName || model.name || "",
+        levels: model.levels.slice()
+      };
+      var keys = [proxyBaseKey(entry.displayName), proxyBaseKey(entry.name)];
+      for (var k = 0; k < keys.length; k += 1) {
+        if (!keys[k]) continue;
+        byBase.set(keys[k], entry);
+        if (model.current) current.set(keys[k], String(model.current).toLowerCase());
+      }
+    }
+    return { byBase: byBase, current: current };
+  }
+
+  function notifyProxyEffortListeners() {
+    proxyEffort.listeners.forEach(function (fn) {
+      try {
+        fn();
+      } catch (err) {
+        // 忽略订阅者异常
+      }
+    });
+  }
+
+  function syncProxyEffort(conversationId) {
+    var root = globalRoot;
+    if (!root || typeof root.fetch !== "function" || proxyEffort.inFlight) return;
+    if (conversationId !== proxyEffort.conversationId) {
+      proxyEffort.conversationId = conversationId;
+      proxyEffort.lastFetchAt = 0;
+    }
+    var now = Date.now();
+    if (now - proxyEffort.lastFetchAt < AG_PROXY_SYNC_INTERVAL_MS) return;
+    proxyEffort.lastFetchAt = now;
+    proxyEffort.inFlight = true;
+    var url =
+      proxyOrigin() +
+      "/plugin/effort/levels" +
+      (conversationId ? "?conversationId=" + encodeURIComponent(String(conversationId)) : "");
+    root
+      .fetch(url, { method: "GET", credentials: "omit", cache: "no-store" })
+      .then(function (res) {
+        if (!res || !res.ok) throw new Error("HTTP " + (res ? res.status : 0));
+        return res.json();
+      })
+      .then(function (data) {
+        var maps = proxyPayloadToMaps(data && Array.isArray(data.models) ? data.models : []);
+        var nextSignature = proxySignatureOf(maps.byBase);
+        var changed = nextSignature !== proxyEffort.signature;
+        proxyEffort.byBase = maps.byBase;
+        proxyEffort.current = maps.current;
+        proxyEffort.signature = nextSignature;
+        proxyEffort.available = maps.byBase.size > 0;
+        proxyEffort.error = "";
+        if (changed) notifyProxyEffortListeners();
+      })
+      .catch(function (err) {
+        proxyEffort.available = false;
+        proxyEffort.error = String((err && err.message) || err);
+      })
+      .then(function () {
+        proxyEffort.inFlight = false;
+      });
+  }
+
+  function pushProxyEffort(entry, level, conversationId) {
+    var key = proxyBaseKey(entry && (entry.displayName || entry.name));
+    if (key) proxyEffort.current.set(key, level);
+    var root = globalRoot;
+    if (!root || typeof root.fetch !== "function") return;
+    var payload = {
+      model: (entry && (entry.name || entry.displayName)) || key,
+      level: level,
+      conversationId: conversationId || null
+    };
+    root
+      .fetch(proxyOrigin() + "/plugin/effort", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "omit",
+        cache: "no-store",
+        body: JSON.stringify(payload)
+      })
+      .catch(function () {
+        // 下一次轮询会重新对齐
+      });
+  }
+
   function findAntigravityTrigger(doc) {
     var d = doc || (typeof document !== "undefined" ? document : null);
     if (!d || typeof d.querySelector !== "function") return null;
@@ -2197,6 +2342,47 @@
       } else {
         baseName = modelObj.label;
       }
+    }
+
+    // 代理档位优先：这是 none/minimal/default 等原生选择器没有的档位来源。
+    var proxyEntry = baseName ? proxyEffort.byBase.get(proxyBaseKey(baseName)) : null;
+    if (proxyEntry && proxyEntry.levels.length >= 2) {
+      var proxyLevels = proxyEntry.levels.slice();
+      var proxyKey = proxyBaseKey(baseName);
+      var proxyCurrent = proxyEffort.current.get(proxyKey);
+      if (!proxyCurrent || proxyLevels.indexOf(proxyCurrent) < 0) {
+        if (activeEffort && proxyLevels.indexOf(activeEffort) >= 0) {
+          proxyCurrent = activeEffort;
+        } else if (perModelEffortMap && proxyLevels.indexOf(perModelEffortMap.get(baseName)) >= 0) {
+          proxyCurrent = perModelEffortMap.get(baseName);
+        } else {
+          proxyCurrent = proxyLevels[0];
+        }
+      }
+      var proxyItems = proxyLevels.map(function (level) {
+        return {
+          effort: level,
+          label: AG_EFFORT_LABELS[level] || level,
+          modelOption: modelObj || selected,
+          proxy: true,
+          proxyBase: baseName,
+          proxyModel: proxyEntry.name
+        };
+      });
+      var proxyIndex = Math.max(0, proxyLevels.indexOf(proxyCurrent));
+      return {
+        baseName: baseName,
+        isClaude: isClaudeModel(baseName),
+        theme: isClaudeModel(baseName) ? "claude" : "codex",
+        locked: false,
+        proxy: true,
+        proxyModel: proxyEntry.name,
+        levels: proxyItems,
+        currentIndex: proxyIndex,
+        currentEffort: proxyLevels[proxyIndex],
+        currentLabel: AG_EFFORT_LABELS[proxyLevels[proxyIndex]] || proxyLevels[proxyIndex],
+        modelOption: modelObj || selected
+      };
     }
 
     var byEffort = baseName && ctx.effortIndex instanceof Map ? ctx.effortIndex.get(baseName) : null;
@@ -3389,6 +3575,19 @@
     var activeSeatListeners = new Set();
     var activeBaseOverride = null;
     var activeModelOptionOverride = null;
+    var activeOverrideSince = 0;
+
+    function setActiveModelOverride(option, base) {
+      activeModelOptionOverride = option || null;
+      activeBaseOverride = base || null;
+      activeOverrideSince = Date.now();
+    }
+
+    function clearActiveModelOverride() {
+      activeModelOptionOverride = null;
+      activeBaseOverride = null;
+      activeOverrideSince = 0;
+    }
     var observer = null;
     var isInternalMutating = false;
     var ignoreModelTriggerUntil = 0;
@@ -3438,6 +3637,7 @@
 
     function getActiveProfile(ctx) {
       if (!ctx) return null;
+      syncProxyEffort(ctx.conversationId);
       var target = activeModelOptionOverride || activeBaseOverride || ctx.selectedModel;
       return resolveModelEffortProfile(ctx, target, perModelEffortMap);
     }
@@ -3607,14 +3807,29 @@
         if (!ctx || !levelItem) return;
         var targetOpt = levelItem.modelOption || (levelItem.raw && levelItem.raw.modelOption);
         var effortKey = levelItem.effort || (levelItem.raw && levelItem.raw.effort);
+        var proxyBase = levelItem.proxyBase || (levelItem.raw && levelItem.raw.proxyBase);
+        // 代理档位：不切换模型，只把档位写回代理（按会话生效）。
+        if (proxyBase && effortKey) {
+          var proxyModel = levelItem.proxyModel || (levelItem.raw && levelItem.raw.proxyModel);
+          perModelEffortMap.set(proxyBase, effortKey);
+          setActiveModelOverride(null, proxyBase);
+          pushProxyEffort({ name: proxyModel, displayName: proxyBase }, effortKey, ctx.conversationId);
+          isInternalMutating = true;
+          try {
+            syncAntigravityDomDecorations(ctx, resolveModelEffortProfile(ctx, proxyBase, perModelEffortMap));
+            notifySeatListeners();
+          } finally {
+            isInternalMutating = false;
+          }
+          return;
+        }
         if (!targetOpt) return;
 
         var parsed = parseModelLabel(targetOpt.label);
         if (parsed) {
           perModelEffortMap.set(parsed.base, parsed.effort);
-          activeBaseOverride = parsed.base;
         }
-        activeModelOptionOverride = targetOpt;
+        setActiveModelOverride(targetOpt, parsed ? parsed.base : targetOpt.label);
 
         markIgnoreModelTrigger();
         commitAntigravityModelOption(ctx, targetOpt, { keepMenuOpen: false });
@@ -3663,6 +3878,12 @@
           var base = groupSpan.getAttribute("data-model-base") || (groupSpan.textContent || "").trim();
           return { type: "group", row: menuItem, base: base };
         }
+        // Models without native effort variants (all third-party models) are
+        // single rows: their label lives on the menuitem itself.
+        var singleLabel = menuItem.getAttribute("data-model-label") || "";
+        if (singleLabel) {
+          return { type: "single", row: menuItem, label: singleLabel };
+        }
         return null;
       }
 
@@ -3697,8 +3918,7 @@
           var prof = resolveModelEffortProfile(ctx, hit.base, perModelEffortMap);
           if (prof && prof.modelOption) {
             targetOption = prof.modelOption;
-            activeBaseOverride = hit.base;
-            activeModelOptionOverride = targetOption;
+            setActiveModelOverride(targetOption, hit.base);
           }
         } else if (hit.type === "single" && hit.label) {
           var optsList = Array.isArray(ctx.modelOptions) ? ctx.modelOptions : [];
@@ -3709,8 +3929,7 @@
             }
           }
           if (targetOption) {
-            activeBaseOverride = hit.label;
-            activeModelOptionOverride = targetOption;
+            setActiveModelOverride(targetOption, hit.label);
           }
         }
 
@@ -4061,11 +4280,24 @@
           bindPanelInteractions(panel);
         }
 
-        // 若外部修改了 selectedModel，清除临时 override 对齐最新模型
-        if (ctx && ctx.selectedModel && activeModelOptionOverride) {
-          if (ctx.selectedModel.label === activeModelOptionOverride.label) {
-            activeModelOptionOverride = null;
-            activeBaseOverride = null;
+        // Temporary overrides only exist between a click and the host applying it.
+        // Drop them once the host selection confirms them, and also when the
+        // host moved to a different model by another path (single-row models
+        // are switched by the native menu handler), so the slider can never
+        // keep showing the previous model's levels.
+        if (ctx && ctx.selectedModel) {
+          var selectedParsed = parseModelLabel(ctx.selectedModel.label);
+          var selectedBase = selectedParsed ? selectedParsed.base : ctx.selectedModel.label || "";
+          var overrideParsed = activeModelOptionOverride ? parseModelLabel(activeModelOptionOverride.label) : null;
+          var overrideBase = overrideParsed ? overrideParsed.base : activeModelOptionOverride ? activeModelOptionOverride.label || "" : "";
+          if (activeModelOptionOverride && selectedBase === overrideBase) {
+            clearActiveModelOverride();
+          } else if (
+            activeModelOptionOverride &&
+            selectedBase !== activeBaseOverride &&
+            Date.now() - activeOverrideSince > 1200
+          ) {
+            clearActiveModelOverride();
           }
         }
 
@@ -4097,8 +4329,30 @@
       });
     }
 
+    // 代理档位是异步取回的：到达后立即重绘，面板静置时也保持低频刷新。
+    var onProxyEffortChange = function () {
+      try {
+        scan();
+      } catch (err) {
+        // 忽略重绘异常
+      }
+    };
+    proxyEffort.listeners.add(onProxyEffortChange);
+    var proxyTimer = null;
+    if (win && typeof win.setInterval === "function") {
+      proxyTimer = win.setInterval(function () {
+        var liveCtx = getLiveContext();
+        if (liveCtx) syncProxyEffort(liveCtx.conversationId);
+      }, AG_PROXY_SYNC_INTERVAL_MS);
+    }
+
     return {
       stop: function () {
+        proxyEffort.listeners.delete(onProxyEffortChange);
+        if (proxyTimer !== null && win && typeof win.clearInterval === "function") {
+          win.clearInterval(proxyTimer);
+          proxyTimer = null;
+        }
         if (observer) {
           observer.disconnect();
           observer = null;

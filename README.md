@@ -9,6 +9,11 @@
 
 - 对话输入框底部工具栏常驻 Low / Medium / High 推理档位滑条
   （Agent 权限下拉左侧），同步当前模型可用档位；单档位模型自动置灰锁定。
+- 第三方模型（third-party-model-patch 接入的 OpenAI 兼容模型）的档位由代理
+  提供：滑条读取 `GET http://127.0.0.1:50999/plugin/effort/levels`，拖动时
+  POST `/plugin/effort`，代理按会话把档位写进请求。因此 `none` / `minimal` /
+  `default` 也能显示和切换，而原生下拉里每个模型只保留一行（原生 UI 只认
+  `low/medium/high/xhigh/max` 五个 token，额外档位无法做成子菜单）。
 - 拖拽跨档即时切换（`pointermove` 阶段即调用
   `setModelConfigByLabelForConversation`），1/3 格宽迟滞棘轮防跳闪。
 - 双风格物理动效：Codex 风格圆纽光晕 + 22 星尘（Gemini 4 Argon /
@@ -70,6 +75,8 @@ node assets/sliderPatch/tools/auto-heal.cjs                # 检查并修复（�
   输入框控件；滑条 UI 必须通过 asar 补丁实现，插件负责保存 payload 并按需修复。
 - 与 `third-party-model-patch` 插件的 modelPatch 改写不同文件，可共存；
   但用纯净备份整体覆盖 app.asar 会同时清除两者。
+- 第三方模型档位依赖该插件的代理（默认 `127.0.0.1:50999`）。代理未运行时
+  滑条只显示原生档位，模型行不会重复，也不会报错。
 - 插件目录 `assets/sliderPatch/` 是唯一运行时来源，自包含、无外部路径依赖；
   删除其他源码副本不影响滑条。
 - 本仓库：https://github.com/heyheyhey3131/codex_styled_effort_slider_for_agy
