@@ -8,8 +8,9 @@
  *    而非盲目照搬 DeepSeek Harness 的 DOM 假设。
  * 2. 在对话输入框底部工具栏、Agent 权限下拉 ([data-testid="permissions-selector-trigger"]) 左侧
  *    常驻挂载紧凑「推理等级」滑条；屏蔽模型行冗余的右侧悬停档位子菜单，保留模型行右侧档位文字并随档位着色。
- * 3. 在菜单内点击上方模型行切换模型时不自动关闭菜单，下方滑条即时联动该模型的可用档位
- *    （单档位模型如 GPT-OSS 120B 自动置灰锁定）。
+ * 3. 在菜单内点击上方模型行切换模型后自动收起下拉栏（与官方原生行为一致），
+ *    单档位模型如 GPT-OSS 120B 自动置灰锁定。
+ *    该行为由 ces-menu-autoclose 补丁改写（原版故意保持菜单常开）。
  * 4. 拖动滑条过程中，圆钮连续跟随指针；一旦滑过档位边界（无需等松手），立即通过 React Fiber
  *    调用官方 setModelConfigByLabelForConversation 切换真实档位，菜单保持常开。
  * 5. 针对 Antigravity 的三档模型 (Low / Medium / High) 采用 0 -> 0.5 -> 1.0 满配能量映射：
@@ -3887,7 +3888,8 @@
         return null;
       }
 
-      // 捕获阶段拦截模型行 pointerup / mouseup，阻止 @base-ui/react 菜单因抬起指针而自动关闭
+      // 捕获阶段拦截模型行 pointerup / mouseup，阻止 @base-ui/react 菜单在指针抬起阶段就先行关闭；
+      // 菜单统一在随后的 click 阶段完成模型切换后再收起，避免面板提前卸载导致切换丢失
       function onPointerOrMouseUpCapture(ev) {
         if (ev.target && typeof ev.target.closest === "function" && ev.target.closest(".ces-ag-section")) {
           return;
@@ -3898,7 +3900,8 @@
         if (typeof ev.stopImmediatePropagation === "function") ev.stopImmediatePropagation();
       }
 
-      // 捕获阶段拦截模型行 click：切换选中模型但保持菜单常开，下方滑条即时联动该模型的档位
+      // 捕获阶段拦截模型行 click：切换选中模型后按下拉栏原生行为收起菜单，
+      // 下方滑条仍会即时联动该模型的档位（菜单收起后再打开即可看到最新档位）
       function onClickCapture(ev) {
         if (ev.target && typeof ev.target.closest === "function" && ev.target.closest(".ces-ag-section")) {
           return;
@@ -3935,7 +3938,18 @@
 
         if (targetOption) {
           tracePush("ag-select-model-in-menu", { label: targetOption.label });
-          commitAntigravityModelOption(ctx, targetOption);
+          // 【ces-menu-autoclose】选中模型后收起模型下拉栏（恢复官方原生行为）。
+          // keepMenuOpen:false -> commitAntigravityModelOption 内部调用 syncModelMenuOpen(false)；
+          // 下一帧再用最新 context 确认一次，防止宿主同步渲染把面板重新打开。
+          markIgnoreModelTrigger();
+          commitAntigravityModelOption(ctx, targetOption, { keepMenuOpen: false });
+          try {
+            setTimeout(function () {
+              syncModelMenuOpen(getLiveContext() || ctx, false);
+            }, 0);
+          } catch (err) {
+            // 忽略延迟关菜单失败
+          }
           isInternalMutating = true;
           try {
             var nextProf = resolveModelEffortProfile(ctx, targetOption, perModelEffortMap);

@@ -79,6 +79,24 @@ node assets/sliderPatch/tools/auto-heal.cjs                # 检查并修复（�
   滑条只显示原生档位，模型行不会重复，也不会报错。
 - 插件目录 `assets/sliderPatch/` 是唯一运行时来源，自包含、无外部路径依赖；
   删除其他源码副本不影响滑条。
+- 注意：`third-party-model-patch` 的 `assets/preload-inject.js` 内联了一份**旧版**滑条代码
+  （带同样的 `__AG_CODEX_EFFORT_SLIDER_START__` 标记）。重跑该插件的模型补丁会把它追加回来，
+  覆盖/抵消本插件对 `lib/client.js` 的改动。需要时先重跑本插件的安装或 `auto-heal.cjs`。
+
+## 本机改动记录
+
+### 2026-11-18 · v1.3.1：点击模型行后自动收起下拉栏（ces-menu-autoclose）
+
+原版为了“切完模型马上拖档位”，在捕获阶段吞掉了模型行的 `pointerup/mouseup/click`，
+导致**选中模型后下拉栏不自动收回**。本机版本改为：
+
+- 保留模型行识别与 `commitAntigravityModelOption` 自切换路径（不改原生子菜单被隐藏后的选择逻辑）；
+- 提交模型时传 `{ keepMenuOpen: false }`，并在下一帧用最新 context 再 `syncModelMenuOpen(false)` 一次，
+  确保下拉栏收起；
+- 滑条本体（输入框常驻滑条、菜单内滑条、拖拽切档、Claude 主题、设置面板、代理档位）行为不变。
+
+回滚：用同目录的 `client.js.bak-menu-autoclose-<时间戳>` 覆盖 `client.js`，再执行
+`node assets/sliderPatch/tools/patch-asar.cjs` 重新注入。
 - 本仓库：https://github.com/heyheyhey3131/codex_styled_effort_slider_for_agy
   上游参考（MIT，视觉/交互灵感来源）：
   github.com/LLYSH-HANNARI/antigravity-Codex-Claude-effort-slider。
