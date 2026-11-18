@@ -3673,6 +3673,15 @@
             }
           }
           var effortSpan = outerSpan.querySelector("span.opacity-70, [data-ces-part='trigger-effort']");
+          // Third-party (proxy) models have no native effort suffix in the
+          // collapsed trigger; add one so the strength shows next to the name,
+          // mirroring native Gemini/Claude triggers.
+          if (!effortSpan && profile.proxy && !profile.locked && profile.currentLabel) {
+            effortSpan = doc.createElement("span");
+            effortSpan.className = "opacity-70";
+            effortSpan.setAttribute("data-ces-part", "trigger-effort");
+            outerSpan.appendChild(effortSpan);
+          }
           if (!profile.locked && profile.baseName) {
             var firstNode = outerSpan.firstChild;
             if (firstNode && firstNode.nodeType === 3 && firstNode.nodeValue !== profile.baseName) {
