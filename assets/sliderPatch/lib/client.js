@@ -3769,6 +3769,39 @@
             sItem.classList.add("text-secondary-foreground");
           }
         }
+
+        // Third-party models render as single rows (no native effort group), so
+        // mirror the group-row decoration: show the proxy level to the right of
+        // the model name, colored like the native effort labels.
+        var singleProxy = proxyEffort.byBase.get(proxyBaseKey(sLabel));
+        if (singleProxy) {
+          var singleProf = resolveModelEffortProfile(ctx, sLabel, perModelEffortMap);
+          if (singleProf && singleProf.levels.length) {
+            var nameSpan = sItem.querySelector("span.truncate");
+            var effortSpan = sItem.querySelector('[data-ces-part="single-effort"]');
+            if (!effortSpan) {
+              effortSpan = doc.createElement("span");
+              effortSpan.className = "shrink-0 opacity-70 text-sm";
+              effortSpan.setAttribute("data-ces-part", "single-effort");
+              if (nameSpan && nameSpan.parentNode) {
+                nameSpan.parentNode.insertBefore(effortSpan, nameSpan.nextSibling);
+              } else {
+                sItem.appendChild(effortSpan);
+              }
+            }
+            var sEffort = isSingleSelected ? profile.currentLabel : singleProf.currentLabel;
+            var sIdx = isSingleSelected ? profile.currentIndex : singleProf.currentIndex;
+            var sCount = singleProf.levels.length;
+            var sMax = sCount > 1 && sIdx === sCount - 1;
+            if (effortSpan.textContent !== sEffort) effortSpan.textContent = sEffort;
+            var sColor = valueColorFor(sEffort, sIdx, sCount, sMax, false) || "";
+            if (effortSpan.style.color !== sColor) effortSpan.style.color = sColor;
+            var sOpacity = sColor ? "1" : "";
+            if (effortSpan.style.opacity !== sOpacity) effortSpan.style.opacity = sOpacity;
+            var sWeight = sColor ? "600" : "";
+            if (effortSpan.style.fontWeight !== sWeight) effortSpan.style.fontWeight = sWeight;
+          }
+        }
       }
     }
 
