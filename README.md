@@ -71,8 +71,10 @@ node assets/sliderPatch/tools/auto-heal.cjs                # 检查并修复（�
 - 与 `third-party-model-patch` 插件的 modelPatch 改写不同文件，可共存；
   但用纯净备份整体覆盖 app.asar 会同时清除两者。
 - 插件目录 `assets/sliderPatch/` 是唯一运行时来源，自包含、无外部路径依赖；
-  删除其他源码副本不影响滑条。上游参考：
-  github.com/LLYSH-HANNARI/antigravity-Codex-Claude-effort-slider（MIT License）。
+  删除其他源码副本不影响滑条。
+- 本仓库：https://github.com/heyheyhey3131/codex_styled_effort_slider_for_agy
+  上游参考（MIT，视觉/交互灵感来源）：
+  github.com/LLYSH-HANNARI/antigravity-Codex-Claude-effort-slider。
 
 ## 免责声明
 
