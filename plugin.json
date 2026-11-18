@@ -1,0 +1,18 @@
+{
+  "name": "antigravity-codex-effort-slider",
+  "displayName": "Codex 风格推理等级滑条 (Codex Effort Slider)",
+  "description": "打包并管理本机 Antigravity 的「Codex / Claude 风格推理等级滑条」补丁：在对话输入框工具栏常驻 Low / Medium / High 推理档位滑条，拖拽跨档即切、双风格物理动效。支持 app.asar 持久安装、CDP 免重启热注入、一键卸载还原，以及 Antigravity 更新后自动修复补丁。",
+  "version": "1.3.0",
+  "author": {
+    "name": "LLYSH-HANNARI",
+    "url": "https://github.com/LLYSH-HANNARI/antigravity-Codex-Claude-effort-slider"
+  },
+  "homepage": "https://llysh-hannari.github.io/antigravity-Codex-Claude-effort-slider/",
+  "repository": "https://github.com/LLYSH-HANNARI/antigravity-Codex-Claude-effort-slider.git",
+  "logo": "assets/logo.svg",
+  "suggestedPrompts": [
+    "检查推理等级滑条补丁的状态",
+    "Antigravity 刚更新了，自动修复并重新应用滑条补丁",
+    "对运行中的 Antigravity 窗口热注入滑条"
+  ]
+}

@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2e1065"/>
+      <stop offset="0.55" stop-color="#4c1d95"/>
+      <stop offset="1" stop-color="#7c3aed"/>
+    </linearGradient>
+    <linearGradient id="fill" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#60a5fa"/>
+      <stop offset="0.5" stop-color="#a78bfa"/>
+      <stop offset="1" stop-color="#e9d5ff"/>
+    </linearGradient>
+    <radialGradient id="knobGlow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.9"/>
+      <stop offset="0.4" stop-color="#c4b5fd" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#7c3aed" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- background -->
+  <rect x="4" y="4" width="120" height="120" rx="28" fill="url(#bg)"/>
+  <rect x="4" y="4" width="120" height="120" rx="28" fill="none" stroke="#a78bfa" stroke-opacity="0.35" stroke-width="2"/>
+
+  <!-- stardust -->
+  <circle cx="34" cy="34" r="2.2" fill="#e9d5ff" fill-opacity="0.9"/>
+  <circle cx="94" cy="30" r="1.6" fill="#f5d0fe" fill-opacity="0.8"/>
+  <circle cx="82" cy="46" r="1.3" fill="#ddd6fe" fill-opacity="0.7"/>
+  <circle cx="48" cy="52" r="1.1" fill="#e9d5ff" fill-opacity="0.6"/>
+
+  <!-- track -->
+  <line x1="26" y1="88" x2="102" y2="88" stroke="#ffffff" stroke-opacity="0.22" stroke-width="9" stroke-linecap="round"/>
+  <!-- filled track -->
+  <line x1="26" y1="88" x2="102" y2="88" stroke="url(#fill)" stroke-width="9" stroke-linecap="round"/>
+
+  <!-- detents -->
+  <circle cx="26" cy="88" r="3.4" fill="#ffffff" fill-opacity="0.95"/>
+  <circle cx="64" cy="88" r="3.4" fill="#ffffff" fill-opacity="0.95"/>
+  <circle cx="102" cy="88" r="3.4" fill="#ffffff" fill-opacity="0.95"/>
+
+  <!-- knob with glow (High tier) -->
+  <circle cx="102" cy="88" r="20" fill="url(#knobGlow)"/>
+  <circle cx="102" cy="88" r="12" fill="#f5f3ff" stroke="#7c3aed" stroke-width="2.5"/>
+  <circle cx="102" cy="88" r="4.5" fill="#7c3aed"/>
+</svg>
