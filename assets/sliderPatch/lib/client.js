@@ -2195,6 +2195,30 @@
     return indexMap;
   }
 
+  // Antigravity 2.34+ keys the native provider effortIndex by model slug
+  // ("gemini-3.8-flash") while the slider resolves profiles by display base
+  // ("Gemini 3.8 Flash"). Re-key the native index to display bases so native
+  // effort groups keep resolving; merge in the label-derived index as fallback.
+  function displayBaseEffortIndex(nativeIndex, modelOptions) {
+    var out = new Map();
+    if (nativeIndex instanceof Map) {
+      nativeIndex.forEach(function (byEffort, key) {
+        if (!(byEffort instanceof Map)) return;
+        var base = null;
+        byEffort.forEach(function (opt) {
+          if (base) return;
+          var p = opt && typeof opt.label === "string" ? parseModelLabel(opt.label) : null;
+          if (p) base = p.base;
+        });
+        out.set(base || key, byEffort);
+      });
+    }
+    buildEffortIndexFromOptions(modelOptions).forEach(function (byEffort, base) {
+      if (!out.has(base)) out.set(base, byEffort);
+    });
+    return out;
+  }
+
   /**
    * 从 Antigravity 的 DOM 节点向上遍历 React Fiber 树，提取：
    * - OXb.Provider: effortIndex, modelOptions, selectedModel, groups
@@ -2278,7 +2302,7 @@
 
     var effortIndex =
       selectorCtx && selectorCtx.effortIndex instanceof Map
-        ? selectorCtx.effortIndex
+        ? displayBaseEffortIndex(selectorCtx.effortIndex, modelOptions)
         : buildEffortIndexFromOptions(modelOptions);
 
     // ★ 关键：在 Antigravity IDE (VSCode / agy.exe) 中：
